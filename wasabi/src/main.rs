@@ -12,7 +12,7 @@ type EfiVoid = u8;
 type EfiHandle = u64;
 type Result<T> = core::result::Result<T, &'static str>;
 
-#[repr(C)]
+#[repr(C)] // C言語と同じルールでメモリレイアウトを決定する
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct EfiGuid {
     pub data0: u32,
@@ -99,7 +99,7 @@ fn locate_graphic_protocol<'a>(
 }
 
 
-#[no_mangle]
+#[no_mangle] // 外部システムが期待する名前を正確に保持するために必要
 fn efi_main(_image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     let efi_graphics_output_protocol = 
         locate_graphic_protocol(efi_system_table).unwrap();
