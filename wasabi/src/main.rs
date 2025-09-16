@@ -113,6 +113,13 @@ fn efi_main(_image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
             }
         }
     }
+    for y in 0..vram.height / 2 {
+        for x in 0..vram.width / 2 {
+            if let Some(pixel) = vram.pixel_at_mut(x, y) {
+                *pixel = 0xff0000;
+            }
+        }
+    }
     // println("Hello, world!");
     loop {
         hlt()
