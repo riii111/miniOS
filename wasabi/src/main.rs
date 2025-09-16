@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(offset_of)]
 
+use core::arch::asm;
 use core::mem::offset_of;
 use core::mem::size_of;
 use core::panic::PanicInfo;
@@ -12,7 +13,7 @@ type EfiVoid = u8;
 type EfiHandle = u64;
 type Result<T> = core::result::Result<T, &'static str>;
 
-#[repr(C)] // C言語と同じルールでメモリレイアウトを決定する
+#[repr(C)] // Memory layout is determined using the same rules as Clang
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct EfiGuid {
     pub data0: u32,
@@ -65,7 +66,6 @@ struct EfiGraphicsOutputProtocolPixelInfo {
 
 const _: () = assert!(size_of::<EfiGraphicsOutputProtocolPixelInfo>() == 36);
 
-
 #[repr(C)]
 #[derive(Debug)]
 struct EfiGraphicsOutputProtocolMode<'a> {
@@ -90,7 +90,7 @@ fn locate_graphic_protocol<'a>(
     let status = (efi_system_table.boot_services.locate_protocol)(
         &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
         null_mut::<EfiVoid>(),
-        &mut graphic_output_protocol as *mut *mut EfiGraphicsOutputProtocol as  *mut *mut EfiVoid,
+        &mut graphic_output_protocol as *mut *mut EfiGraphicsOutputProtocol as *mut *mut EfiVoid,
     );
     if status != EfiStatus::Success {
         return Err("Failed to locate graphics output protocol");
@@ -98,27 +98,31 @@ fn locate_graphic_protocol<'a>(
     Ok(unsafe { &*graphic_output_protocol })
 }
 
+// HLT = One of the x86 CPU machine code instructions. It puts the CPU to sleep until an interrupt occurs
+pub fn hlt() {
+    unsafe { asm!("hlt") }
+}
 
-#[no_mangle] // 外部システムが期待する名前を正確に保持するために必要
+#[no_mangle] // Necessary to accurately maintain the name expected by external systems
 fn efi_main(_image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
-    let efi_graphics_output_protocol = 
-        locate_graphic_protocol(efi_system_table).unwrap();
+    let efi_graphics_output_protocol = locate_graphic_protocol(efi_system_table).unwrap();
     let vram_addr = efi_graphics_output_protocol.mode.frame_buffer_base;
     let vram_byte_size = efi_graphics_output_protocol.mode.frame_buffer_size;
     let vram = unsafe {
-        slice::from_raw_parts_mut(
-            vram_addr as *mut u32,
-            vram_byte_size / size_of::<u32>()
-        )
+        slice::from_raw_parts_mut(vram_addr as *mut u32, vram_byte_size / size_of::<u32>())
     };
     for e in vram {
         *e = 0xffffff;
     }
     // println("Hello, world!");
-    loop {}
+    loop {
+        hlt()
+    }
 }
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop {}
+    loop {
+        hlt()
+    }
 }
