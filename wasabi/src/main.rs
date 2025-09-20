@@ -314,7 +314,7 @@ fn draw_font_fg<T: Bitmap>(buf: &mut T, x: i64, y: i64, color: u32, c: char) {
                     '*' => color,
                     _ => continue,
                 };
-                let _ = draw_point(buf, color, x * dx as i64, y + dy as i64);
+                let _ = draw_point(buf, color, x + dx as i64, y + dy as i64);
             }
         }
     }
