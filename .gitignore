@@ -1,3 +1,11 @@
 target
 .DS_Store
 .env
+
+# UEFI build artifacts and runtime files
+wasabi/mnt/
+wasabi/target/
+wasabi/third_party/ovmf/*
+
+# UEFI variables (runtime state)
+**/NvVars
