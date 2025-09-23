@@ -90,7 +90,7 @@ impl<'a> Iterator for MemoryMapIterator<'a> {
             None
         } else {
             let e: &EfiMemoryDescriptor = unsafe {
-                &*(self.map.memory_map_buffer.as_ptr().add(self.ofs) as *const &EfiMemoryDescriptor)
+                &*(self.map.memory_map_buffer.as_ptr().add(self.ofs) as *const EfiMemoryDescriptor)
             };
             self.ofs += self.map.descriptor_size;
             Some(e)
