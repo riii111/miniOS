@@ -2,7 +2,7 @@ use crate::x86::hlt;
 use crate::x86::write_io_part_u8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u32)]
+#[repr(u32)]  // Do not rely on Rust's default representation; explicitly control it
 pub enum QemuExitCode {
     Success = 0x1, // QEMU will exit with status 3
     Fail = 0x2,    // QEMU will exit will status 5
