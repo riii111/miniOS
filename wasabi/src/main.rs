@@ -1,14 +1,15 @@
-#![no_std]
 #![no_main]
+#![no_std]
 #![feature(offset_of)]
 
-use core::arch::asm;
 use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::writeln;
 use wasabi::graphics::draw_test_pattern;
 use wasabi::graphics::fill_rect;
 use wasabi::graphics::Bitmap;
+use wasabi::qemu::exit_qemu;
+use wasabi::qemu::QemuExitCode;
 use wasabi::uefi::exit_from_efi_boot_services;
 use wasabi::uefi::init_vram;
 use wasabi::uefi::EfiHandle;
@@ -17,10 +18,7 @@ use wasabi::uefi::EfiSystemTable;
 use wasabi::uefi::MemoryMapHolder;
 use wasabi::uefi::VramTextWriter;
 
-// HLT = One of the x86 CPU machine code instructions. It puts the CPU to sleep until an interrupt occurs
-pub fn hlt() {
-    unsafe { asm!("hlt") }
-}
+use wasabi::x86::hlt;
 
 #[no_mangle] // Necessary to accurately maintain the name expected by external systems
 fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
@@ -61,7 +59,5 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop {
-        hlt()
-    }
+    exit_qemu(QemuExitCode::Fail);
 }
