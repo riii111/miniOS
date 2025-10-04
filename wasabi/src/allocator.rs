@@ -22,7 +22,17 @@ pub fn round_up_to_nearest_pow2(v: usize) -> Result<usize> {
 }
 #[test_case]
 fn round_up_to_nearest_pow2_tests() {
-    // unimplemented!("cargo test should fail, right...?")
+    assert_eq!(round_up_to_nearest_pow2(0), Err("Out of range"));
+    assert_eq!(round_up_to_nearest_pow2(1), Ok(1));
+    assert_eq!(round_up_to_nearest_pow2(2), Ok(2));
+    assert_eq!(round_up_to_nearest_pow2(3), Ok(4));
+    assert_eq!(round_up_to_nearest_pow2(4), Ok(4));
+    assert_eq!(round_up_to_nearest_pow2(5), Ok(8));
+    assert_eq!(round_up_to_nearest_pow2(6), Ok(8));
+    assert_eq!(round_up_to_nearest_pow2(7), Ok(8));
+    assert_eq!(round_up_to_nearest_pow2(8), Ok(8));
+    assert_eq!(round_up_to_nearest_pow2(9), Ok(16));
+    assert_eq!(round_up_to_nearest_pow2(9), Ok(16));
 }
 
 /// Vertical bar `|` represents the chunk that has a Header
@@ -183,7 +193,7 @@ impl FirstFitAllocator {
             }
             self.add_free_from_descriptor(e);
         }
-    }
+  }
     fn add_free_from_descriptor(&self, desc: &EfiMemoryDescriptor) {
         let mut start_addr = desc.physical_start() as usize;
         let mut size = desc.number_of_pages() as usize * 4096;
