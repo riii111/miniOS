@@ -6,6 +6,7 @@ target
 wasabi/mnt/
 wasabi/target/
 wasabi/third_party/ovmf/*
+wasabi/log/*
 
 # UEFI variables (runtime state)
 **/NvVars
