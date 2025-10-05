@@ -16,6 +16,7 @@ use core::ops::DerefMut;
 use core::ptr::null_mut;
 
 pub fn round_up_to_nearest_pow2(v: usize) -> Result<usize> {
+    // Determine the exponent of the required power of 2 from the leading_zeros of v-1
     1usize
         .checked_shl(usize::BITS - v.wrapping_sub(1).leading_zeros())
         .ok_or("Out of range")
@@ -101,6 +102,7 @@ impl Header {
 
             // Make a Header for the allocated object
             let mut size_used = 0;
+            // By allocating from the rear, maintain a large contiguous area at the front
             let allocated_addr = (self.end_addr() - size) & !(align - 1);
             let mut header_for_allocated =
                 unsafe { Self::new_from_addr(allocated_addr - HEADER_SIZE) };
@@ -170,7 +172,7 @@ unsafe impl GlobalAlloc for FirstFitAllocator {
 impl FirstFitAllocator {
     pub fn alloc_with_options(&self, layout: Layout) -> *mut u8 {
         let mut header = self.first_header.borrow_mut();
-        let mut header = header.deref_mut();
+        let mut header = header.deref_mut();  // RefMut → &mut
         loop {
             match header {
                 Some(e) => match e.provide(layout.size(), layout.align()) {
