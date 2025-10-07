@@ -172,7 +172,7 @@ unsafe impl GlobalAlloc for FirstFitAllocator {
 impl FirstFitAllocator {
     pub fn alloc_with_options(&self, layout: Layout) -> *mut u8 {
         let mut header = self.first_header.borrow_mut();
-        let mut header = header.deref_mut();  // RefMut → &mut
+        let mut header = header.deref_mut(); // RefMut → &mut
         loop {
             match header {
                 Some(e) => match e.provide(layout.size(), layout.align()) {
