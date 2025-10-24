@@ -1,7 +1,17 @@
+extern crate alloc;
+
+use crate::error;
+use crate::info;
 use crate::result::Result;
+use alloc::boxed::Box;
 use core::arch::asm;
+use core::arch::global_asm;
 use core::fmt;
 use core::marker::PhantomData;
+use core::mem::offset_of;
+use core::mem::size_of;
+use core::mem::size_of_val;
+use core::pin::Pin;
 
 pub fn hlt() {
     unsafe { asm!("hlt") }
@@ -138,3 +148,59 @@ pub type PT = Table<1, 12, [u8; PAGE_SIZE]>;
 pub type PD = Table<2, 21, PT>;
 pub type PDPT = Table<3, 30, PD>;
 pub type PML4 = Table<4, 39, PDPT>;
+
+/// # Safety
+/// Anything can happen if the given selector is invalid.
+pub unsafe fn write_es(selector: u16) {
+    asm!(
+    "mov es, ax",
+                  in("ax") selector)
+}
+
+/// # Safety
+/// Anything can happen if the CS given is invalid.
+pub unsafe fn write_cs(cs: u16) {
+    // The MOV instruction CANNOT be used to load the CS register.
+    // Use far-jump(ljmp) instead.
+    asm!(
+  "lea rax, [rip + 2f]", // Target address (label 1 below)
+  "push cx",  // Construct a far pointer on the stack
+  "push rax",
+  "ljmp [rsp]",
+        "2:",
+        "add rsp, 8 + 2",  // Cleanup the far pointer on the stack
+                in("cx") cs)
+}
+
+/// # Safety
+/// Anything can happen if the given selector is invalid.
+pub unsafe fn write_ss(selector: u16) {
+    asm!(
+  "mov ss, ax",
+                in("ax") selector)
+}
+
+/// # Safety
+/// Anything can happen if the given selector is invalid.
+pub unsafe fn write_ds(ds: u16) {
+    asm!(
+  "mov ds, ax",
+                in("ax") ds)
+}
+
+/// # Safety
+/// Anything can happen if the given selector is invalid.
+pub unsafe fn write_fs(selector: u16) {
+    asm!(
+  "mov fs, ax",
+                in("ax") selector)
+}
+
+/// # Safety
+/// Anything can happen if the given selector is invalid.
+pub unsafe fn write_gs(selector: u16) {
+    asm!(
+  "mov gs, ax",
+                in("ax") selector)
+}
+
