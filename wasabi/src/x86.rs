@@ -532,3 +532,79 @@ impl IdtDescriptor {
         }
     }
 }
+
+#[allow(dead_code)]
+#[repr(C, packed)]
+#[derive(Debug)]
+struct IdtrParameters {
+    limit: u16,
+    base: *const IdtDescriptor,
+}
+const _: () = assert!(size_of::<IdtrParameters>() == 10);
+const _: () = assert!(offset_of!(IdtrParameters, base) == 2);
+
+pub struct Idt {
+    #[allow(dead_code)]
+    entries: Pin<Box<[IdtDescriptor; 0x100]>>,
+}
+impl Idt {
+    pub fn new(segment_selector: u16) -> Self {
+        let mut entries = [IdtDescriptor::new(
+            segment_selector,
+            1,
+            IdtAttr::IntGateDPL0,
+            int_handler_unimplemented,
+        ); 0x100];
+        entries[3] = IdtDescriptor::new(
+            segment_selector,
+            1,
+            // Set DPL=3 to allow user land to make this interrupt (e.g. via int3 op)
+            IdtAttr::IntGateDPL3,
+            interrupt_entrypoint3,
+        );
+        entries[6] = IdtDescriptor::new(
+            segment_selector,
+            1,
+            IdtAttr::IntGateDPL0,
+            interrupt_entrypoint6,
+        );
+        entries[8] = IdtDescriptor::new(
+            segment_selector,
+            1,
+            IdtAttr::IntGateDPL0,
+            interrupt_entrypoint8,
+        );
+        entries[13] = IdtDescriptor::new(
+            segment_selector,
+            1,
+            IdtAttr::IntGateDPL0,
+            interrupt_entrypoint13,
+        );
+        entries[14] = IdtDescriptor::new(
+            segment_selector,
+            1,
+            IdtAttr::IntGateDPL0,
+            interrupt_entrypoint14,
+        );
+        entries[32] = IdtDescriptor::new(
+            segment_selector,
+            1,
+            IdtAttr::IntGateDPL0,
+            interrupt_entrypoint32,
+        );
+        let limit = size_of_val(&entries) as u16;
+        let entries = Box::pin(entries);
+        let params = IdtrParameters {
+            limit,
+            base: entries.as_ptr(),
+        };
+        info!("Loading IDT: {params:?}");
+        // SAFETY: This is safe since it loads a valid IDT that is constructed
+        // in the code just above
+        unsafe {
+            asm!("lidt [rcx]",
+                in("rcx") &params);
+        }
+        Self { entries }
+    }
+}
