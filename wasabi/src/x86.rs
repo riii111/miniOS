@@ -411,3 +411,70 @@ inthandler_common:
     iretq
 "#
 );
+
+pub fn read_cr2() -> u64 {
+    let mut cr2: u64;
+    unsafe {
+        asm!("mov rax, cr2",
+            out("rax") cr2)
+    }
+    cr2
+}
+
+#[no_mangle]
+extern "sysv64" fn inthandler(info: &InterruptInfo, index: usize) {
+    error!("Interrupt Info: {:?}", info);
+    error!("Exception {index:#04X}: ");
+    match index {
+        3 => {
+            error!("Breakpoint");
+        }
+        6 => {
+            error!("Invalid Opcode");
+        }
+        8 => {
+            error!("Double Fault");
+        }
+        13 => {
+            error!("General Protection Fault");
+            let rip = info.ctx.rip;
+            error!("Bytes @ RIP({rip:$018X}):");
+            let rip = rip as *const u8;
+            let bytes = unsafe { core::slice::from_raw_parts(rip, 16) };
+            error!("  = {bytes:02X?}");
+        }
+        14 => {
+            error!("Page Fault");
+            error!("CR2={:#018X}", read_cr2());
+            error!(
+                "Caused by: A {} mode {} on a {} page, page structures are {}",
+                if info.error_code & 0b0000_0100 != 0 {
+                    "user"
+                } else {
+                    "supervisor"
+                },
+                if info.error_code & 0b0001_0000 != 0 {
+                    "instruction fetch"
+                } else if info.error_code & 0b0010 != 0 {
+                    "data write"
+                } else {
+                    "data read"
+                },
+                if info.error_code & 0b0001 != 0 {
+                    "present"
+                } else {
+                    "non-present"
+                },
+                if info.error_code & 0b1000 != 0 {
+                    "invalid"
+                } else {
+                    "valid"
+                },
+            );
+        }
+        _ => {
+            error!("Not handled");
+        }
+    }
+    panic!("fatal exception");
+}
