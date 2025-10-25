@@ -608,3 +608,54 @@ impl Idt {
         Self { entries }
     }
 }
+
+#[repr(C, packed)]
+struct TaskStateSegment64Inner {
+    _reserved0: u32,
+    _rsp: [u64; 3], // for switch into ring0-2
+    _ist: [u64; 8], // ist[1]-ist[7] (ist[0] is reserved)
+    _reserved1: [u16; 5],
+    _io_map_base_addr: u16,
+}
+const _: () = assert!(size_of::<TaskStateSegment64Inner>() == 104);
+
+pub struct TaskStateSegment64 {
+    inner: Pin<Box<TaskStateSegment64Inner>>,
+}
+impl TaskStateSegment64 {
+    pub fn phys_addr(&self) -> u64 {
+        self.inner.as_ref().get_ref() as *const TaskStateSegment64Inner as u64
+    }
+    unsafe fn alloc_interrupt_stack() -> u64 {
+        const HANDLER_STACK_SIZE: usize = 64 * 1024;
+        let stack = Box::new([0u8; HANDLER_STACK_SIZE]);
+        let rsp = unsafe { stack.as_ptr().add(HANDLER_STACK_SIZE) as u64 };
+        core::mem::forget(stack);
+        // now, no one except us own the region since it is forgotten by the allocator ;)
+        rsp
+    }
+    pub fn new() -> Self {
+        let rsp0 = unsafe { Self::alloc_interrupt_stack() };
+        let mut ist = [0u64; 8];
+        for ist in ist[1..=7].iter_mut() {
+            *ist = unsafe { Self::alloc_interrupt_stack() };
+        }
+        let tss64 = TaskStateSegment64Inner {
+            _reserved0: 0,
+            _rsp: [rsp0, 0, 0],
+            _ist: ist,
+            _reserved1: [0; 5],
+            _io_map_base_addr: 0,
+        };
+        let this = Self {
+            inner: Box::pin(tss64),
+        };
+        info!("TSS64 created @ {:#X}", this.phys_addr(),);
+        this
+    }
+}
+impl Drop for TaskStateSegment64 {
+    fn drop(&mut self) {
+        panic!("TSS64 being dropped!");
+    }
+}
