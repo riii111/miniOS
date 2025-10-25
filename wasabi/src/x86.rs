@@ -337,6 +337,23 @@ macro_rules! interrupt_entrypoint {
         ));
     };
 }
+macro_rules! interrupt_entrypoint_with_ecode {
+    ($index:literal) => {
+        global_asm!(concat!(
+            ".global interrupt_entrypoint",
+            stringify!($index),
+            "\n",
+            "interrupt_entrypoint",
+            stringify!($index),
+            ":\n",
+            "push rcx // Save rcx first to reuse\n",
+            "mov rcx, ",
+            stringify!($index),
+            "\n",
+            "jmp inthandler_common"
+        ));
+    };
+}
 
 interrupt_entrypoint!(3);
 interrupt_entrypoint!(6);
@@ -438,7 +455,7 @@ extern "sysv64" fn inthandler(info: &InterruptInfo, index: usize) {
         13 => {
             error!("General Protection Fault");
             let rip = info.ctx.rip;
-            error!("Bytes @ RIP({rip:$018X}):");
+            error!("Bytes @ RIP({rip:#018X}):");
             let rip = rip as *const u8;
             let bytes = unsafe { core::slice::from_raw_parts(rip, 16) };
             error!("  = {bytes:02X?}");
@@ -658,4 +675,143 @@ impl Drop for TaskStateSegment64 {
     fn drop(&mut self) {
         panic!("TSS64 being dropped!");
     }
+}
+
+pub fn init_exceptions() -> (GdtWrapper, Idt) {
+    let gdt = GdtWrapper::default();
+    gdt.load();
+    unsafe {
+        write_cs(KERNEL_CS);
+        write_ss(KERNEL_DS);
+        write_es(KERNEL_DS);
+        write_ds(KERNEL_DS);
+        write_fs(KERNEL_DS);
+        write_gs(KERNEL_DS);
+    }
+    let idt = Idt::new(KERNEL_CS);
+    (gdt, idt)
+}
+
+pub const BIT_TYPE_DATA: u64 = 0b10u64 << 43;
+pub const BIT_TYPE_CODE: u64 = 0b11u64 << 43;
+
+pub const BIT_PRESENT: u64 = 1u64 << 47;
+pub const BIT_CS_LONG_MODE: u64 = 1u64 << 53;
+pub const BIT_CS_READABLE: u64 = 1u64 << 53;
+pub const BIT_DS_WRITABLE: u64 = 1u64 << 41;
+pub const BIT_DPL0: u64 = 0u64 << 45;
+pub const BIT_DPL3: u64 = 3u64 << 45;
+
+#[repr(u64)]
+enum GdtAttr {
+    KernelCode = BIT_TYPE_CODE | BIT_PRESENT | BIT_CS_LONG_MODE | BIT_CS_READABLE,
+    KernelData = BIT_TYPE_DATA | BIT_PRESENT | BIT_DS_WRITABLE,
+}
+
+#[allow(dead_code)]
+#[repr(C, packed)]
+struct GdtrParameters {
+    limit: u16,
+    base: *const Gdt,
+}
+
+pub const KERNEL_CS: u16 = 1 << 3;
+pub const KERNEL_DS: u16 = 2 << 3;
+pub const TSS64_SEL: u16 = 3 << 3;
+
+#[allow(dead_code)]
+#[repr(C, packed)]
+pub struct Gdt {
+    null_segment: GdtSegmentDescriptor,
+    kernel_code_segment: GdtSegmentDescriptor,
+    kernel_data_segment: GdtSegmentDescriptor,
+    task_state_segment: TaskStateSegment64Descriptor,
+}
+const _: () = assert!(size_of::<Gdt>() == 40);
+
+#[allow(dead_code)]
+pub struct GdtWrapper {
+    inner: Pin<Box<Gdt>>,
+    tss64: TaskStateSegment64,
+}
+
+impl GdtWrapper {
+    pub fn load(&self) {
+        let params = GdtrParameters {
+            limit: (size_of::<Gdt>() - 1) as u16,
+            base: self.inner.as_ref().get_ref() as *const Gdt,
+        };
+        info!("Loading GDT @ {:#018X}", params.base as u64);
+        // SAFETY: This is safe since it is loading a valid GDT just constructed in the above
+        unsafe {
+            asm!("lgdt [rcx]",
+                in("rcx") &params);
+        }
+        info!("Loading TSS ( selector = {:#X} )", TSS64_SEL);
+        unsafe {
+            asm!("ltr cx",
+                in("cx") TSS64_SEL);
+        }
+    }
+}
+
+impl Default for GdtWrapper {
+    fn default() -> Self {
+        let tss64 = TaskStateSegment64::new();
+        let gdt = Gdt {
+            null_segment: GdtSegmentDescriptor::null(),
+            kernel_code_segment: GdtSegmentDescriptor::new(GdtAttr::KernelCode),
+            kernel_data_segment: GdtSegmentDescriptor::new(GdtAttr::KernelData),
+            task_state_segment: TaskStateSegment64Descriptor::new(tss64.phys_addr()),
+        };
+        let gdt = Box::pin(gdt);
+        GdtWrapper { inner: gdt, tss64 }
+    }
+}
+
+pub struct GdtSegmentDescriptor {
+    value: u64,
+}
+impl GdtSegmentDescriptor {
+    const fn null() -> Self {
+        Self { value: 0 }
+    }
+    const fn new(attr: GdtAttr) -> Self {
+        Self { value: attr as u64 }
+    }
+}
+impl fmt::Display for GdtSegmentDescriptor {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:#18X}", self.value)
+    }
+}
+
+#[repr(C, packed)]
+#[allow(dead_code)]
+struct TaskStateSegment64Descriptor {
+    limit_low: u16,
+    base_low: u16,
+    base_mid_low: u8,
+    attr: u16,
+    base_mid_high: u8,
+    base_high: u32,
+    reserved: u32,
+}
+impl TaskStateSegment64Descriptor {
+    const fn new(base_addr: u64) -> Self {
+        Self {
+            limit_low: size_of::<TaskStateSegment64Inner>() as u16,
+            base_low: (base_addr & 0xffff) as u16,
+            base_mid_low: ((base_addr >> 16) & 0xff) as u8,
+            attr: 0b1000_0000_1000_1001,
+            base_mid_high: ((base_addr >> 24) & 0xff) as u8,
+            base_high: ((base_addr >> 32) & 0xffffffff) as u32,
+            reserved: 0,
+        }
+    }
+}
+const _: () = assert!(size_of::<TaskStateSegment64Descriptor>() == 16);
+
+pub fn trigger_debug_interrupt() {
+    unsafe { asm!("int3") }
 }
