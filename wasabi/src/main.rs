@@ -85,13 +85,10 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     init_paging(&memory_map);
     info!("Now we are using our own page tables!");
 
-    info!("Reading from memory address 0...");
+    init_paging(&memory_map);
+    info!("Now we are using our own page tables!");
 
-    #[allow(clippy::zero_ptr)]
-    #[allow(deref_nullptr)]
-    let value_at_zero = unsafe { *(0 as *const u8) };
-    info!("value_at_zero = {value_at_zero}");
-
+    // Unmap page 0 to detect null ptr dereference
     let page_table = read_cr3();
     unsafe {
         (*page_table)
@@ -99,12 +96,6 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
             .expect("Failed to unmap page 0");
     }
     flush_tlb();
-
-    info!("Reading from memory address 0... (again)");
-    #[allow(clippy::zero_ptr)]
-    #[allow(deref_nullptr)]
-    let value_at_zero = unsafe { *(0 as *const u8) };
-    info!("value_at_zero = {value_at_zero}");
 
     loop {
         hlt()
