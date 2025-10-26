@@ -11,24 +11,35 @@ use wasabi::graphics::fill_rect;
 use wasabi::graphics::Bitmap;
 use wasabi::info;
 use wasabi::init::init_basic_runtime;
+use wasabi::init::init_paging;
 use wasabi::print::hexdump;
 use wasabi::println;
 use wasabi::qemu::exit_qemu;
 use wasabi::qemu::QemuExitCode;
 use wasabi::uefi::init_vram;
+use wasabi::uefi::locate_loaded_image_protocol;
 use wasabi::uefi::EfiHandle;
 use wasabi::uefi::EfiMemoryType;
 use wasabi::uefi::EfiSystemTable;
 use wasabi::uefi::VramTextWriter;
 use wasabi::warn;
+use wasabi::x86::flush_tlb;
 
 use wasabi::x86::hlt;
+use wasabi::x86::init_exceptions;
+use wasabi::x86::read_cr3;
+use wasabi::x86::trigger_debug_interrupt;
+use wasabi::x86::PageAttr;
 
 #[no_mangle] // Necessary to accurately maintain the name expected by external systems
 fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     println!("Booting WasabiOS...");
     println!("image_handle: {:#018X}", image_handle);
     println!("efi_system_table: {:#p}", efi_system_table);
+    let loaded_image_protocol = locate_loaded_image_protocol(image_handle, efi_system_table)
+        .expect("Failed to get LoadedImageProtocol");
+    println!("image_base: {:#018X}", loaded_image_protocol.image_base);
+    println!("image_size: {:#018X}", loaded_image_protocol.image_size);
     info!("info");
     warn!("warn");
     error!("error");
@@ -55,6 +66,37 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     )
     .unwrap();
     writeln!(w, "Hello Non-UEFI world!").unwrap();
+    let cr3 = wasabi::x86::read_cr3();
+    println!("cr3 = {cr3:#p}");
+    let t = Some(unsafe { &*cr3 });
+    println!("{t:?}");
+    // If there is a next page, return its address
+    let t = t.and_then(|t| t.next_level(0));
+    println!("{t:?}");
+    let t = t.and_then(|t| t.next_level(0));
+    println!("{t:?}");
+    let t = t.and_then(|t| t.next_level(0));
+    println!("{t:?}");
+
+    let (_gdt, _idt) = init_exceptions();
+    info!("Exception initialized!");
+    trigger_debug_interrupt();
+    info!("Execution continued.");
+    init_paging(&memory_map);
+    info!("Now we are using our own page tables!");
+
+    init_paging(&memory_map);
+    info!("Now we are using our own page tables!");
+
+    // Unmap page 0 to detect null ptr dereference
+    let page_table = read_cr3();
+    unsafe {
+        (*page_table)
+            .create_mapping(0, 4096, 0, PageAttr::NotPresent)
+            .expect("Failed to unmap page 0");
+    }
+    flush_tlb();
+
     loop {
         hlt()
     }
