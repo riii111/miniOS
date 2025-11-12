@@ -8,6 +8,7 @@ pub mod acpi;
 pub mod allocator;
 pub mod executor;
 pub mod graphics;
+pub mod hpet;
 pub mod init;
 pub mod print;
 pub mod qemu;

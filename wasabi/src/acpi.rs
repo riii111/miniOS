@@ -1,3 +1,4 @@
+use crate::hpet::HpetRegisters;
 use crate::result::Result;
 use core::mem::size_of;
 
@@ -114,8 +115,12 @@ impl AcpiTable for AcpiHpetDescriptor {
     type Table = Self;
 }
 impl AcpiHpetDescriptor {
-    pub fn base_address(&self) -> Result<usize> {
-        self.address.address_in_memory_space()
+    pub fn base_address(&self) -> Result<&'static mut HpetRegisters> {
+        unsafe {
+            self.address
+                .address_in_memory_space()
+                .map(|addr| &mut *(addr as *mut HpetRegisters))
+        }
     }
 }
 const _: () = assert!(size_of::<AcpiHpetDescriptor>() == 56);
