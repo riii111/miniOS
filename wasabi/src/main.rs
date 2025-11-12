@@ -6,6 +6,7 @@ use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::writeln;
 use wasabi::error;
+use wasabi::executor::block_on;
 use wasabi::graphics::draw_test_pattern;
 use wasabi::graphics::fill_rect;
 use wasabi::graphics::Bitmap;
@@ -96,6 +97,12 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
             .expect("Failed to unmap page 0");
     }
     flush_tlb();
+
+    let result = block_on(async {
+        info!("Hello from the async world!");
+        Ok(())
+    });
+    info!("block_on completed! result = {result:?}");
 
     loop {
         hlt()
