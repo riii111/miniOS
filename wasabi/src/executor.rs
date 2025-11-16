@@ -125,9 +125,6 @@ impl Future for Yield {
         }
     }
 }
-pub async fn yield_execution() {
-    Yield::default().await
-}
 
 pub struct TimeoutFuture {
     time_out: Duration,
