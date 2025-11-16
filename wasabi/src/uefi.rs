@@ -1,7 +1,6 @@
-use crate::graphics::draw_font_fg;
+use crate::acpi::AcpiRsdpStruct;
 use crate::graphics::Bitmap;
 use crate::result::Result;
-use core::fmt;
 use core::mem::offset_of;
 use core::mem::size_of;
 use core::ptr::null_mut;
@@ -30,6 +29,13 @@ const EFI_LOADED_IMAGE_PROTOCOL_GUID: EfiGuid = EfiGuid {
     data1: 0x9562,
     data2: 0x11d2,
     data3: [0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B],
+};
+
+const EFI_ACPI_TABLE_GUID: EfiGuid = EfiGuid {
+    data0: 0x8868e871,
+    data1: 0xe4f1,
+    data2: 0x11d3,
+    data3: [0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81],
 };
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -170,11 +176,39 @@ const _: () = assert!(offset_of!(EfiBootServicesTable, exit_boot_services) == 23
 const _: () = assert!(offset_of!(EfiBootServicesTable, locate_protocol) == 320);
 
 #[repr(C)]
+#[derive(Copy, Clone)]
+pub struct EfiConfigurationTable {
+    vendor_guid: EfiGuid,
+    pub vendor_table: *const u8,
+}
+
+#[repr(C)]
 pub struct EfiSystemTable {
     _reserved0: [u64; 12],
     pub boot_services: &'static EfiBootServicesTable,
+    number_of_table_entries: usize,
+    configuration_table: *const EfiConfigurationTable,
 }
 const _: () = assert!(offset_of!(EfiSystemTable, boot_services) == 96);
+
+impl EfiSystemTable {
+    pub fn boot_services(&self) -> &EfiBootServicesTable {
+        self.boot_services
+    }
+    fn lookup_config_table(&self, guid: &EfiGuid) -> Option<EfiConfigurationTable> {
+        for i in 0..self.number_of_table_entries {
+            let ct = unsafe { &*self.configuration_table.add(i) };
+            if ct.vendor_guid == *guid {
+                return Some(*ct);
+            }
+        }
+        None
+    }
+    pub fn acpi_table(&self) -> Option<&'static AcpiRsdpStruct> {
+        self.lookup_config_table(&EFI_ACPI_TABLE_GUID)
+            .map(|t| unsafe { &*(t.vendor_table as *const AcpiRsdpStruct) })
+    }
+}
 
 #[repr(C)]
 #[derive(Debug)]
@@ -275,36 +309,6 @@ pub fn init_vram(efi_system_table: &EfiSystemTable) -> Result<VramBufferInfo> {
         height: gp.mode.info.vertical_resolution as i64,
         pixels_per_line: gp.mode.info.pixels_per_scan_line as i64,
     })
-}
-
-pub struct VramTextWriter<'a> {
-    vram: &'a mut VramBufferInfo,
-    cursor_x: i64,
-    cursor_y: i64,
-}
-
-impl<'a> VramTextWriter<'a> {
-    pub fn new(vram: &'a mut VramBufferInfo) -> Self {
-        Self {
-            vram,
-            cursor_x: 0,
-            cursor_y: 0,
-        }
-    }
-}
-impl fmt::Write for VramTextWriter<'_> {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        for c in s.chars() {
-            if c == '\n' {
-                self.cursor_y += 16;
-                self.cursor_x = 0;
-                continue;
-            }
-            draw_font_fg(self.vram, self.cursor_x, self.cursor_y, 0xffffff, c);
-            self.cursor_x += 8;
-        }
-        Ok(())
-    }
 }
 
 pub fn exit_from_efi_boot_services(
