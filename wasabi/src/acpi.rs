@@ -64,10 +64,23 @@ impl Xsdt {
     fn num_of_entries(&self) -> usize {
         (self.header.length as usize - self.header_size()) / size_of::<*const u8>()
     }
+
+    /// Retrieves the pointer to the `index`-th ACPI table descriptor.
+    ///
+    /// XSDT (Extended System Description Table) holds pointers to various
+    /// ACPI tables such as HPET, APIC, MCFG, etc.
+    ///
+    /// ```text
+    /// Layer 1: self (XSDT)
+    ///          ↓ skip header, interpret as pointer array
+    /// Layer 2: [0x5000][0x6000][0x7000]...  (addresses of ACPI tables)
+    ///          ↓ read index-th element
+    /// Layer 3: ACPI table (e.g., HPET descriptor at 0x5000)
+    /// ```
     unsafe fn entry(&self, index: usize) -> *const u8 {
         ((self as *const Self as *const u8).add(self.header_size()) as *const *const u8)
             .add(index)
-            .read_unaligned()
+            .read_unaligned() // ACPI's "packed" structures span across alignment boundaries
     }
     fn iter(&self) -> XsdtIterator {
         XsdtIterator::new(self)

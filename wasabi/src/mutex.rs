@@ -103,6 +103,8 @@ impl<T: Sized> Mutex<T> {
     }
     #[track_caller]
     pub fn lock(&self) -> MutexGuard<T> {
+        // Spin-lock: busy-wait until lock is acquired
+        // Note: A production mutex would use adaptive spinning + OS blocking
         for _ in 0..10000 {
             if let Ok(locked) = self.try_lock() {
                 return locked;

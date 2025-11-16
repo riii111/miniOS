@@ -50,6 +50,7 @@ impl Hpet {
         };
         unsafe {
             hpet.globally_disable();
+
             for i in 0..hpet.num_of_timers {
                 let timer = &mut hpet.registers.timers[i];
                 let mut config = read_volatile(&timer.configuration_and_capability);
@@ -59,7 +60,9 @@ impl Hpet {
                     | (0b11111 << 9));
                 timer.write_config(config);
             }
+
             write_volatile(&mut hpet.registers.main_counter_value, 0);
+
             hpet.globally_enable();
         }
         hpet
