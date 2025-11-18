@@ -8,6 +8,7 @@ use crate::graphics::Bitmap;
 use crate::hpet::set_global_hpet;
 use crate::hpet::Hpet;
 use crate::info;
+use crate::pci::Pci;
 use crate::uefi::exit_from_efi_boot_services;
 use crate::uefi::EfiHandle;
 use crate::uefi::EfiMemoryType;
@@ -86,4 +87,16 @@ pub fn init_display(vram: &mut VramBufferInfo) {
     let vh = vram.height();
     fill_rect(vram, 0x000000, 0, 0, vw, vh).expect("fill_rect failed");
     draw_test_pattern(vram);
+}
+
+pub fn init_pci(acpi: &AcpiRsdpStruct) {
+    if let Some(mcfg) = acpi.mcfg() {
+        for i in 0..mcfg.num_of_entries() {
+            if let Some(e) = mcfg.entry(i) {
+                info!("{}", e)
+            }
+        }
+        let pci = Pci::new(mcfg);
+        pci.probe_devices();
+    }
 }

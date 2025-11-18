@@ -5,9 +5,9 @@
 use core::panic::PanicInfo;
 use core::time::Duration;
 use wasabi::error;
-use wasabi::executor::Executor;
-use wasabi::executor::Task;
-use wasabi::executor::TimeoutFuture;
+use wasabi::executor::sleep;
+use wasabi::executor::spawn_global;
+use wasabi::executor::start_global_executor;
 use wasabi::hpet::global_timestamp;
 use wasabi::info;
 use wasabi::init::init_allocator;
@@ -15,11 +15,13 @@ use wasabi::init::init_basic_runtime;
 use wasabi::init::init_display;
 use wasabi::init::init_hpet;
 use wasabi::init::init_paging;
+use wasabi::init::init_pci;
 use wasabi::print::hexdump;
 use wasabi::print::set_global_vram;
 use wasabi::println;
 use wasabi::qemu::exit_qemu;
 use wasabi::qemu::QemuExitCode;
+use wasabi::serial::SerialPort;
 use wasabi::uefi::init_vram;
 use wasabi::uefi::locate_loaded_image_protocol;
 use wasabi::uefi::EfiHandle;
@@ -52,25 +54,41 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     init_paging(&memory_map);
 
     init_hpet(acpi);
+    init_pci(acpi);
     let t0 = global_timestamp();
-    let task1 = Task::new(async move {
+    let task1 = async move {
         for i in 100..=103 {
             info!("{i} hpet.main_counter = {:?}", global_timestamp() - t0);
-            TimeoutFuture::new(Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(1)).await;
         }
         Ok(())
-    });
-    let task2 = Task::new(async move {
+    };
+    let task2 = async move {
         for i in 200..=203 {
             info!("{i} hpet.main_counter = {:?}", global_timestamp() - t0);
-            TimeoutFuture::new(Duration::from_secs(2)).await;
+            sleep(Duration::from_secs(2)).await;
         }
         Ok(())
-    });
-    let mut executor = Executor::new();
-    executor.enqueue(task1);
-    executor.enqueue(task2);
-    Executor::run(executor)
+    };
+    let serial_task = async {
+        let sp = SerialPort::default();
+        if let Err(e) = sp.loopback_test() {
+            error!("{e:?}");
+            return Err("serial: loopback test failed");
+        }
+        info!("Started to monitor serial port");
+        loop {
+            if let Some(v) = sp.try_read() {
+                let c = char::from_u32(v as u32);
+                info!("serial input: {v:#04X} = {c:?}");
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    };
+    spawn_global(task1);
+    spawn_global(task2);
+    spawn_global(serial_task);
+    start_global_executor()
 }
 
 #[panic_handler]

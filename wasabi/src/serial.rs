@@ -1,3 +1,4 @@
+use crate::result::Result;
 use crate::x86::busy_loop_hint;
 use crate::x86::read_io_port_u8;
 use crate::x86::write_io_port_u8;
@@ -38,11 +39,32 @@ impl SerialPort {
         }
         write_io_port_u8(self.base, c as u8);
     }
+    pub fn loopback_test(&self) -> Result<()> {
+        // Set in loopback mode
+        write_io_port_u8(self.base + 4, 0x1e);
+        self.send_char('T');
+        if self.try_read().ok_or("loopback_test failed: No response")? != b'T' {
+            return Err("loopback_test failed: wrong data received");
+        }
+        // Return to the normal mode
+        write_io_port_u8(self.base + 4, 0x0f);
+        Ok(())
+    }
     pub fn send_str(&self, s: &str) {
         let mut sc = s.chars();
         let slen = s.chars().count();
         for _ in 0..slen {
             self.send_char(sc.next().unwrap());
+        }
+    }
+    pub fn try_read(&self) -> Option<u8> {
+        if read_io_port_u8(self.base + 5) & 0x01 == 0 {
+            None
+        } else {
+            let c = read_io_port_u8(self.base);
+            // Enable FIFO, clear them, with 14-byte threshold
+            write_io_port_u8(self.base + 2, 0xC7);
+            Some(c)
         }
     }
 }
