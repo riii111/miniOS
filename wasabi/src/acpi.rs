@@ -118,6 +118,8 @@ impl GenericAddress {
 }
 
 #[repr(packed)]
+#[derive(Debug)]
+#[allow(dead_code)]
 pub struct AcpiHpetDescriptor {
     header: SystemDescriptionTableHeader,
     _reserved0: u32,
